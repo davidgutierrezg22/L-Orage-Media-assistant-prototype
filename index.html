@@ -11,7 +11,11 @@
   <main class="layout">
     <section class="intro">
       <a class="wordmark" href="#" aria-label="L’Orage Media">L’ORAGE <span>MEDIA</span></a>
-      <div class="intro-copy">
+      <nav class="intro-tabs" role="tablist" aria-label="Información de L’Orage Media">
+        <button class="intro-tab active" id="about-tab" type="button" role="tab" aria-selected="true" aria-controls="about-panel">Inicio</button>
+        <button class="intro-tab" id="credits-tab" type="button" role="tab" aria-selected="false" aria-controls="credits-panel">Créditos</button>
+      </nav>
+      <div class="intro-copy" id="about-panel" role="tabpanel" aria-labelledby="about-tab">
         <p class="eyebrow">ASISTENTE COMERCIAL · DEMOSTRACIÓN</p>
         <h1>Más conversaciones.<br /><em>Mejores oportunidades.</em></h1>
         <p class="intro-text">Un primer prototipo del agente que atiende prospectos, recomienda servicios y prepara el traspaso a un asesor de L’Orage Media.</p>
@@ -21,13 +25,19 @@
           <div><span class="cap-icon">03</span><span>Prepara el contacto para el asesor</span></div>
         </div>
       </div>
+      <div class="intro-copy credits-copy" id="credits-panel" role="tabpanel" aria-labelledby="credits-tab" hidden>
+        <p class="eyebrow">CRÉDITOS DEL PROYECTO</p>
+        <h1>Una idea que<br /><em>toma forma.</em></h1>
+        <p class="intro-text"><strong>Creada por David Gutiérrez</strong> para L’Orage Media, con apoyo de herramientas de inteligencia artificial.</p>
+        <p class="intro-text">Este prototipo busca facilitar la atención de clientes y conectar a quienes desean contratar con un asesor humano.</p>
+      </div>
       <p class="footnote">Respuestas generadas con IA · Enfocada en negocios; sin navegación web ni acciones externas.</p>
     </section>
 
     <section class="chat-card" aria-label="Chat de demostración">
       <header class="chat-header">
         <div class="avatar">L’</div>
-        <div class="agent-info"><strong>Asistente de negocios</strong><span><i></i><span id="model-status">Preparando asistente…</span></span></div>
+        <div class="agent-info"><strong>Asesora comercial</strong><span><i></i><span id="model-status">Preparando asistente…</span></span></div>
         <button class="reset" id="reset" title="Reiniciar conversación" aria-label="Reiniciar conversación">↻</button>
       </header>
       <div class="chat-meta"><span>ATENCIÓN COMERCIAL</span><span>·</span><span>RESPUESTA INMEDIATA</span></div>

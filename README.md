@@ -1,6 +1,6 @@
-# Asistente de negocios de L’Orage Media
+# Asesora comercial de L’Orage Media
 
-Aplicación local con una interfaz de chat y respuestas generadas por un modelo de lenguaje. El asistente puede conversar de forma abierta sobre negocios y orientar sobre los servicios de L’Orage Media.
+Aplicación local con una interfaz de chat para vender los planes de Contenido y Redes y el Sistema IA Comercial de L’Orage Media. La conversación de negocios ayuda a descubrir la necesidad, recomendar un plan o combo y guiar al prospecto hacia el contacto con un asesor.
 
 ## Ejecutar en tu computadora
 
@@ -15,9 +15,12 @@ La app se conecta al modelo local a través de Ollama en `http://127.0.0.1:11434
 
 ## Alcance del asistente
 
-- Responde libremente preguntas educativas sobre emprendimiento, administración, modelos de negocio, marketing, ventas, atención al cliente, operaciones y finanzas de empresa.
-- Responde en español por defecto, con ejemplos y pasos cuando sean útiles.
-- Puede explicar la información aprobada de los tarifarios de L’Orage Media. No inventa precios ni condiciones si no están en esa información.
+- Su objetivo principal es vender los dos productos aprobados: Contenido y Redes y Sistema IA Comercial, solos o en combo.
+- Descubre las necesidades del negocio y recomienda según la matriz comercial del modelo: presencia digital, demora al responder leads, volumen de consultas o necesidad de crecer con una combinación de servicios.
+- Contesta dudas de negocios de forma breve como parte de la venta y luego vuelve a la recomendación del plan cuando sea pertinente.
+- Usa precios, prestaciones, descuentos de combo y plazos tal como aparecen en el tarifario. No inventa precios ni condiciones ni garantiza resultados.
+- Cuando el prospecto confirma que quiere contratar, muestra un enlace preparado de WhatsApp a Camilo Esquiaqui. El cliente debe enviarlo; la app no hace transferencia automática.
+- No atribuye a L’Orage herramientas que no estén en el tarifario y acepta saludos y agradecimientos naturales.
 - Rechaza con amabilidad preguntas ajenas a los negocios.
 - No tiene herramientas de navegación ni puede enviar mensajes, crear citas, ejecutar código o hacer acciones externas.
 - No ofrece asesoría legal, tributaria o financiera personalizada.

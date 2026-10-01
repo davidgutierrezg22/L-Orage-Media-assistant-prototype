@@ -3,8 +3,25 @@ const composer = document.querySelector('#composer');
 const input = document.querySelector('#message-input');
 const sendButton = document.querySelector('#send-button');
 const modelStatus = document.querySelector('#model-status');
+const aboutTab = document.querySelector('#about-tab');
+const creditsTab = document.querySelector('#credits-tab');
+const aboutPanel = document.querySelector('#about-panel');
+const creditsPanel = document.querySelector('#credits-panel');
 
-const greeting = '¡Hola! Soy el asistente de negocios de L’Orage Media. Puedes preguntarme con tus propias palabras sobre emprendimiento, ventas, marketing, administración o nuestros servicios.';
+function showIntroTab(activeTab) {
+  const showingCredits = activeTab === creditsTab;
+  aboutTab.classList.toggle('active', !showingCredits);
+  creditsTab.classList.toggle('active', showingCredits);
+  aboutTab.setAttribute('aria-selected', String(!showingCredits));
+  creditsTab.setAttribute('aria-selected', String(showingCredits));
+  aboutPanel.hidden = showingCredits;
+  creditsPanel.hidden = !showingCredits;
+}
+
+aboutTab.addEventListener('click', () => showIntroTab(aboutTab));
+creditsTab.addEventListener('click', () => showIntroTab(creditsTab));
+
+const greeting = '¡Hola! Soy la asesora comercial de L’Orage Media. Cuéntame qué quieres mejorar en tu negocio y te recomiendo un plan de Contenido y Redes, Sistema IA Comercial o un combo. También puedo responder preguntas de negocios para ayudarte a elegir.';
 let conversation = [{ role: 'assistant', content: greeting }];
 let sending = false;
 
