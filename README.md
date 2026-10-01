@@ -4,14 +4,14 @@ Aplicación local con una interfaz de chat y respuestas generadas por un modelo 
 
 ## Ejecutar en tu computadora
 
-Requisitos: Node.js 22 o superior y pnpm.
+Requisitos: Node.js 22 o superior, pnpm y Ollama instalado y abierto.
 
-1. Instala las dependencias con `pnpm install`.
-2. Copia `.env.example` a `.env` y pega en ese archivo tu clave de Vercel AI Gateway.
+1. Asegúrate de tener el modelo local: `ollama run qwen2.5-coder:7b`. Si aparece el chat de Ollama, escribe `/bye` para volver a PowerShell; Ollama seguirá disponible en segundo plano.
+2. Instala las dependencias con `pnpm install`.
 3. Inicia la aplicación con `pnpm dev`.
 4. Abre `http://localhost:3000`.
 
-La clave `AI_GATEWAY_API_KEY` se utiliza solo en el servidor. No la pegues en `app.js`, `index.html` ni en mensajes de GitHub. El uso del modelo puede tener costos según la cuenta y el proveedor configurados en AI Gateway.
+La app se conecta al modelo local a través de Ollama en `http://127.0.0.1:11434`. Puedes cambiar `OLLAMA_BASE_URL` y `OLLAMA_MODEL` en `.env`; no se necesita una clave de AI Gateway para esta configuración.
 
 ## Alcance del asistente
 
@@ -26,5 +26,6 @@ La clave `AI_GATEWAY_API_KEY` se utiliza solo en el servidor. No la pegues en `a
 
 - La conversación se ejecuta en el navegador local y no se guarda en una base de datos.
 - El servidor limita el historial, el tamaño de los mensajes y la frecuencia de solicitudes.
-- La interfaz no se conecta con WhatsApp, Instagram ni con un CRM; tampoco transfiere leads a una persona.
-- GitHub Pages sirve archivos estáticos y no ejecuta este backend. Para compartir la app funcionando por Internet, hay que desplegar también `server.mjs` en un servicio compatible y guardar la clave como variable de entorno privada.
+- La app ofrece formato Markdown seguro para respuestas del asistente (negritas, cursivas, listas, títulos, código y enlaces).
+- Cuando detecta una intención clara de contratación, muestra un enlace de WhatsApp con un mensaje preparado para Camilo Esquiaqui. El cliente revisa y envía el mensaje; la app no lo envía ni integra WhatsApp Business, Instagram o un CRM.
+- GitHub Pages sirve archivos estáticos y no ejecuta este backend. Esta configuración de Ollama está pensada para uso local; una versión pública necesitaría un modelo alojado en un servidor accesible desde Internet.
