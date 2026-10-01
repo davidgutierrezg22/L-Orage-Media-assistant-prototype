@@ -1,25 +1,30 @@
-# Asistente comercial de L’Orage Media
+# Asistente de negocios de L’Orage Media
 
-Prototipo local de interfaz para conversar con prospectos, orientar sobre el tarifario y simular el traspaso a un asesor.
+Aplicación local con una interfaz de chat y respuestas generadas por un modelo de lenguaje. El asistente puede conversar de forma abierta sobre negocios y orientar sobre los servicios de L’Orage Media.
 
-## Abrir
+## Ejecutar en tu computadora
 
-Abre `index.html` en un navegador moderno. No requiere instalar paquetes ni servidor.
+Requisitos: Node.js 22 o superior y pnpm.
 
-## Alcance actual
+1. Instala las dependencias con `pnpm install`.
+2. Copia `.env.example` a `.env` y pega en ese archivo tu clave de Vercel AI Gateway.
+3. Inicia la aplicación con `pnpm dev`.
+4. Abre `http://localhost:3000`.
 
-- Incluye respuestas guiadas con precios y servicios del tarifario compartido.
-- Permite explorar Sistema IA Comercial, contenido/redes, pauta y desarrollo web.
-- Recoge un nombre al pedir contacto y arma un resumen visible del prospecto.
-- El traspaso es una demostración: no se envía información ni se notifica a un asesor.
-- No hay modelo de IA conectado y no se integra con WhatsApp, Instagram ni CRM.
+La clave `AI_GATEWAY_API_KEY` se utiliza solo en el servidor. No la pegues en `app.js`, `index.html` ni en mensajes de GitHub. El uso del modelo puede tener costos según la cuenta y el proveedor configurados en AI Gateway.
 
-## Siguiente etapa para llevarlo a producción
+## Alcance del asistente
 
-1. Elegir el canal inicial y el proveedor de mensajería (por ejemplo, WhatsApp Business Platform o Instagram Messaging).
-2. Definir dónde recibirá el asesor las conversaciones (CRM, bandeja compartida o notificación) y qué datos se deben solicitar.
-3. Crear un backend con un modelo de IA, base de conocimiento revisada y reglas que impidan inventar precios o condiciones.
-4. Conectar el backend al canal, crear la asignación/notificación de asesor y registrar el consentimiento y los datos necesarios.
-5. Probar conversaciones de compra, dudas, casos fuera del tarifario y solicitudes de atención humana antes de activar el canal.
+- Responde libremente preguntas educativas sobre emprendimiento, administración, modelos de negocio, marketing, ventas, atención al cliente, operaciones y finanzas de empresa.
+- Responde en español por defecto, con ejemplos y pasos cuando sean útiles.
+- Puede explicar la información aprobada de los tarifarios de L’Orage Media. No inventa precios ni condiciones si no están en esa información.
+- Rechaza con amabilidad preguntas ajenas a los negocios.
+- No tiene herramientas de navegación ni puede enviar mensajes, crear citas, ejecutar código o hacer acciones externas.
+- No ofrece asesoría legal, tributaria o financiera personalizada.
 
-Las credenciales de plataformas deben guardarse como variables de entorno en el backend, nunca en el navegador.
+## Límites técnicos de esta versión
+
+- La conversación se ejecuta en el navegador local y no se guarda en una base de datos.
+- El servidor limita el historial, el tamaño de los mensajes y la frecuencia de solicitudes.
+- La interfaz no se conecta con WhatsApp, Instagram ni con un CRM; tampoco transfiere leads a una persona.
+- GitHub Pages sirve archivos estáticos y no ejecuta este backend. Para compartir la app funcionando por Internet, hay que desplegar también `server.mjs` en un servicio compatible y guardar la clave como variable de entorno privada.
