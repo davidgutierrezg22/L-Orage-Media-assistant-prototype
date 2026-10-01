@@ -3,18 +3,25 @@ import { readFile, stat } from 'node:fs/promises';
 import { extname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
-import { generateText, streamText } from 'ai';
+import { generateText, gateway, streamText } from 'ai';
 
 const root = resolve(fileURLToPath(new URL('.', import.meta.url)));
 const port = Number(process.env.PORT || 3000);
+const host = process.env.HOST || '127.0.0.1';
+const aiProvider = process.env.AI_PROVIDER || 'ollama';
 const ollamaBaseUrl = (process.env.OLLAMA_BASE_URL || 'http://127.0.0.1:11434').replace(/\/$/, '');
 const ollamaModel = process.env.OLLAMA_MODEL || 'qwen2.5-coder:7b';
+const aiGatewayModel = process.env.AI_GATEWAY_MODEL || 'google/gemini-3.5-flash-lite';
+const aiGatewayApiKey = process.env.AI_GATEWAY_API_KEY;
 const maxRequestBytes = 24_000;
 const maxMessageLength = 1_500;
 const maxAssistantMessageLength = 5_000;
 const maxMessages = 12;
 const rateLimits = new Map();
 const ollama = createOpenAICompatible({ name: 'ollama', baseURL: `${ollamaBaseUrl}/v1` });
+const languageModel = aiProvider === 'gateway'
+  ? gateway(aiGatewayModel)
+  : ollama.chatModel(ollamaModel);
 const outOfScopeReply = 'Mi especialidad es ayudarte a vender y atender mejor en tu negocio con los planes de L’Orage Media: Contenido y Redes o Sistema IA Comercial. Cuéntame qué quieres mejorar y te recomiendo una opción.';
 const advisorPhone = '573052840566';
 
@@ -143,12 +150,14 @@ function validateMessages(value) {
 async function handleChat(request, response) {
   if (request.method !== 'POST') return json(response, 405, { error: 'Método no permitido.' });
   if (isRateLimited(request)) return json(response, 429, { error: 'Hay muchas consultas seguidas. Espera unos minutos e inténtalo de nuevo.' });
-  const modelStatus = await getOllamaStatus();
-  if (!modelStatus.connected) {
-    return json(response, 503, { error: 'Ollama no está disponible. Abre Ollama y vuelve a intentarlo.' });
-  }
-  if (!modelStatus.modelAvailable) {
-    return json(response, 503, { error: `No encuentro el modelo ${ollamaModel}. Descárgalo con ollama run ${ollamaModel}.` });
+  const modelStatus = await getModelStatus();
+  if (!modelStatus.configured) {
+    const error = aiProvider === 'gateway'
+      ? 'Falta configurar AI_GATEWAY_API_KEY en el servidor.'
+      : !modelStatus.connected
+        ? 'Ollama no está disponible. Abre Ollama y vuelve a intentarlo.'
+        : `No encuentro el modelo ${ollamaModel}. Descárgalo con ollama run ${ollamaModel}.`;
+    return json(response, 503, { error });
   }
 
   let messages;
@@ -202,11 +211,11 @@ async function handleChat(request, response) {
 
   let streamError;
   const result = streamText({
-    model: ollama.chatModel(ollamaModel),
+    model: languageModel,
     system: systemPrompt,
     messages,
     maxOutputTokens: 250,
-    onError({ error }) { streamError = error; console.error('Ollama error:', error); },
+    onError({ error }) { streamError = error; console.error('AI model error:', error); },
   });
 
   response.writeHead(200, {
@@ -221,7 +230,7 @@ async function handleChat(request, response) {
       wroteText = true;
       if (!response.write(delta)) await new Promise((resolveDrain) => response.once('drain', resolveDrain));
     }
-    if (streamError && !wroteText) response.write('No pude conectar con Ollama. Comprueba que siga abierto e inténtalo de nuevo.');
+    if (streamError && !wroteText) response.write('No pude conectar con el modelo. Inténtalo de nuevo en unos minutos.');
     response.end();
   } catch (error) {
     console.error('Chat stream error:', error);
@@ -250,7 +259,7 @@ async function isBusinessRelated(messages) {
 
   try {
     const result = await generateText({
-      model: ollama.chatModel(ollamaModel),
+      model: languageModel,
       system: scopeCheckPrompt,
       prompt: JSON.stringify(recentHistory),
       maxOutputTokens: 8,
@@ -429,16 +438,26 @@ function findSelectedOffer(messages) {
   return null;
 }
 
-async function getOllamaStatus() {
+async function getModelStatus() {
+  if (aiProvider === 'gateway') {
+    return {
+      provider: 'gateway',
+      configured: Boolean(aiGatewayApiKey),
+      connected: Boolean(aiGatewayApiKey),
+      modelAvailable: Boolean(aiGatewayApiKey),
+      model: aiGatewayModel,
+    };
+  }
+
   try {
     const response = await fetch(`${ollamaBaseUrl}/api/tags`, { signal: AbortSignal.timeout(1500) });
-    if (!response.ok) return { connected: false, modelAvailable: false };
+    if (!response.ok) return { provider: 'ollama', configured: false, connected: false, modelAvailable: false, model: ollamaModel };
     const data = await response.json();
     const modelAvailable = Array.isArray(data.models)
       && data.models.some((model) => model.name === ollamaModel || model.model === ollamaModel);
-    return { connected: true, modelAvailable };
+    return { provider: 'ollama', configured: modelAvailable, connected: true, modelAvailable, model: ollamaModel };
   } catch {
-    return { connected: false, modelAvailable: false };
+    return { provider: 'ollama', configured: false, connected: false, modelAvailable: false, model: ollamaModel };
   }
 }
 
@@ -479,14 +498,14 @@ async function serveFile(pathname, response) {
 const server = createServer(async (request, response) => {
   const url = new URL(request.url || '/', `http://${request.headers.host || 'localhost'}`);
   if (url.pathname === '/api/health') {
-    const status = await getOllamaStatus();
-    return json(response, 200, { configured: status.connected && status.modelAvailable, ...status, model: ollamaModel });
+    const status = await getModelStatus();
+    return json(response, status.configured ? 200 : 503, status);
   }
   if (url.pathname === '/api/chat') return handleChat(request, response);
   if (request.method !== 'GET' && request.method !== 'HEAD') return json(response, 405, { error: 'Método no permitido.' });
   return serveFile(url.pathname, response);
 });
 
-server.listen(port, '127.0.0.1', () => {
-  console.log(`Asistente L’Orage listo en http://localhost:${port}`);
+server.listen(port, host, () => {
+  console.log(`Asistente L’Orage listo en http://${host}:${port}`);
 });

@@ -152,7 +152,9 @@ async function checkService() {
   try {
     const response = await fetch('/api/health');
     const result = await response.json();
-    modelStatus.textContent = result.configured ? 'Ollama local conectado' : result.connected ? 'Falta el modelo local' : 'Abre Ollama para conectar';
+    modelStatus.textContent = result.provider === 'gateway'
+      ? result.configured ? 'AI Gateway configurado' : 'Falta configurar AI Gateway'
+      : result.configured ? 'Ollama local conectado' : result.connected ? 'Falta el modelo local' : 'Abre Ollama para conectar';
     modelStatus.parentElement.querySelector('i').classList.toggle('offline', !result.configured);
   } catch {
     modelStatus.textContent = 'Abre la app con pnpm dev';
