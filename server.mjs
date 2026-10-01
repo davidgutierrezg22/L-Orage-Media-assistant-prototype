@@ -1,6 +1,7 @@
 import { createServer } from 'node:http';
 import { readFile, stat } from 'node:fs/promises';
 import { extname, resolve } from 'node:path';
+import { isIP } from 'node:net';
 import { fileURLToPath } from 'node:url';
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
 import { generateText, gateway, streamText } from 'ai';
@@ -9,6 +10,9 @@ const root = resolve(fileURLToPath(new URL('.', import.meta.url)));
 const port = Number(process.env.PORT || 3000);
 const host = process.env.HOST || '127.0.0.1';
 const aiProvider = process.env.AI_PROVIDER || 'ollama';
+if (!['ollama', 'gateway'].includes(aiProvider)) {
+  throw new Error('AI_PROVIDER debe ser "ollama" o "gateway".');
+}
 const ollamaBaseUrl = (process.env.OLLAMA_BASE_URL || 'http://127.0.0.1:11434').replace(/\/$/, '');
 const ollamaModel = process.env.OLLAMA_MODEL || 'qwen2.5-coder:7b';
 const aiGatewayModel = process.env.AI_GATEWAY_MODEL || 'google/gemini-3.5-flash-lite';
@@ -18,6 +22,10 @@ const maxMessageLength = 1_500;
 const maxAssistantMessageLength = 5_000;
 const maxMessages = 12;
 const rateLimits = new Map();
+const rateLimitWindowMs = 10 * 60 * 1000;
+const maxRateLimitEntries = 10_000;
+const gatewayStatusCacheMs = 60 * 1000;
+let gatewayStatusCache = null;
 const ollama = createOpenAICompatible({ name: 'ollama', baseURL: `${ollamaBaseUrl}/v1` });
 const languageModel = aiProvider === 'gateway'
   ? gateway(aiGatewayModel)
@@ -99,10 +107,22 @@ function sendChatText(response, text) {
 
 function isRateLimited(request) {
   const now = Date.now();
-  const key = request.socket.remoteAddress || 'unknown';
-  const windowMs = 10 * 60 * 1000;
+  const forwardedAddress = request.headers['cf-connecting-ip'];
+  const cloudflareAddress = Array.isArray(forwardedAddress) ? forwardedAddress[0] : forwardedAddress;
+  const socketAddress = request.socket.remoteAddress;
+  const key = typeof cloudflareAddress === 'string' && isIP(cloudflareAddress.trim())
+    ? cloudflareAddress.trim()
+    : typeof socketAddress === 'string' && isIP(socketAddress)
+      ? socketAddress
+      : 'unknown';
   const entry = rateLimits.get(key);
-  if (!entry || now - entry.startedAt >= windowMs) {
+  if (!entry || now - entry.startedAt >= rateLimitWindowMs) {
+    if (!entry && rateLimits.size >= maxRateLimitEntries) {
+      for (const [address, candidate] of rateLimits) {
+        if (now - candidate.startedAt >= rateLimitWindowMs) rateLimits.delete(address);
+      }
+      if (rateLimits.size >= maxRateLimitEntries) return true;
+    }
     rateLimits.set(key, { startedAt: now, count: 1 });
     return false;
   }
@@ -151,9 +171,17 @@ async function handleChat(request, response) {
   if (request.method !== 'POST') return json(response, 405, { error: 'Método no permitido.' });
   if (isRateLimited(request)) return json(response, 429, { error: 'Hay muchas consultas seguidas. Espera unos minutos e inténtalo de nuevo.' });
   const modelStatus = await getModelStatus();
-  if (!modelStatus.configured) {
+  if (!modelStatus.ready) {
     const error = aiProvider === 'gateway'
-      ? 'Falta configurar AI_GATEWAY_API_KEY en el servidor.'
+      ? !modelStatus.configured
+        ? 'Falta configurar AI_GATEWAY_API_KEY en el servidor.'
+        : !modelStatus.connected
+          ? 'No se pudo conectar con AI Gateway.'
+          : modelStatus.authenticated === false
+            ? 'AI Gateway rechazó la clave configurada. Revísala en Render.'
+            : modelStatus.authenticated !== true
+              ? 'No se pudo validar AI_GATEWAY_API_KEY con AI Gateway.'
+              : 'El modelo ' + aiGatewayModel + ' no aparece disponible en AI Gateway.'
       : !modelStatus.connected
         ? 'Ollama no está disponible. Abre Ollama y vuelve a intentarlo.'
         : `No encuentro el modelo ${ollamaModel}. Descárgalo con ollama run ${ollamaModel}.`;
@@ -333,7 +361,7 @@ function buildComboReply(message) {
   if (/\bbasico\b/.test(normalized)) {
     return '**Combo Contenido Básico + IA Básico:** $1.552.000/mes + $450.000 de configuración de IA. El descuento del 10% aplica a la mensualidad de IA. Incluye un canal para IA (WhatsApp o Instagram), respuestas 24/7, entrenamiento con información del negocio y agendamiento simple, junto con el paquete Contenido Básico. El combo tiene mínimo 3 meses; la inversión en anuncios va aparte. ¿Quieres que te pase con Camilo para avanzar?';
   }
-  return 'Hay tres combinaciones con condición definida: **Contenido Básico + IA Básico** ($1.552.000/mes + $450.000 de configuración), **Contenido Intermedio + IA Básico** ($2.338.000/mes + $450.000 de configuración) o **IA Avanzado** ($2.457.000/mes + $650.000 de configuración), y **Contenido Premium + IA Avanzado** ($3.420.000/mes con configuración de IA gratis). Todos los combos tienen mínimo 3 meses; la inversión en anuncios se paga aparte. ¿Cuál se acerca más a lo que necesitas?';
+  return 'Hay cuatro combinaciones: **Contenido Básico + IA Básico** ($1.552.000/mes + $450.000 de configuración), **Contenido Intermedio + IA Básico** ($2.338.000/mes + $450.000 de configuración), **Contenido Intermedio + IA Avanzado** ($2.457.000/mes + $650.000 de configuración) y **Contenido Premium + IA Avanzado** ($3.420.000/mes con configuración de IA gratis). Todos los combos tienen mínimo 3 meses; la inversión en anuncios se paga aparte. ¿Cuál se acerca más a lo que necesitas?';
 }
 
 function buildSocialMediaReply() {
@@ -373,9 +401,11 @@ function isOfferConfirmation(messages) {
 
 function findSelectedOffer(messages) {
   const latestUserMessage = normalizeText(messages.at(-1)?.content || '');
+  const latestAssistant = normalizeText(messages.slice(-5).filter(({ role }) => role === 'assistant').at(-1)?.content || '');
   const tierMatch = latestUserMessage.match(/\b(premium|intermedio|basico|avanzado)\b/);
   const asksAi = /\b(?:ia|inteligencia artificial|automatizar|automatizacion|crm|leads?)\b/.test(latestUserMessage);
   const asksContent = /\b(?:contenido|redes|publicaciones|reels|paquete)\b/.test(latestUserMessage);
+  const explicitlyStandalone = /\b(?:solo|solamente|por separado|independiente|sin combo)\b/.test(latestUserMessage);
 
   if (/\bcombo\b/.test(latestUserMessage)) {
     if (/\bpremium\b/.test(latestUserMessage)) return 'Combo Contenido Premium + IA Avanzado';
@@ -390,6 +420,40 @@ function findSelectedOffer(messages) {
     if (/\bbasico\b/.test(latestUserMessage)) return 'Combo Contenido Básico + IA Básico';
   }
 
+  if (!explicitlyStandalone && tierMatch && !asksContent && !asksAi) {
+    const offersIntermediateOptions = /contenido intermedio.{0,30}sistema ia/.test(latestAssistant)
+      && /ia basico/.test(latestAssistant)
+      && /ia avanzado/.test(latestAssistant)
+      && /(?:dos opciones|2 opciones)/.test(latestAssistant);
+    if (offersIntermediateOptions) {
+      if (tierMatch[1] === 'avanzado') return 'Combo Contenido Intermedio + IA Avanzado';
+      if (tierMatch[1] === 'basico') return 'Combo Contenido Intermedio + IA Básico';
+    }
+
+    if (tierMatch[1] === 'basico') {
+      const offersBasicCombo = /combo/.test(latestAssistant)
+        && /contenido basico/.test(latestAssistant)
+        && /ia basico/.test(latestAssistant)
+        && !/contenido (?:intermedio|premium)/.test(latestAssistant);
+      if (offersBasicCombo) return 'Combo Contenido Básico + IA Básico';
+      if (/ia comercial basico/.test(latestAssistant) && !/contenido/.test(latestAssistant)) {
+        return 'IA Comercial Básico';
+      }
+      if (/contenido y redes/.test(latestAssistant) && !/ia comercial|combo/.test(latestAssistant)) {
+        return 'Contenido y Redes Básico';
+      }
+    }
+
+    const offersPremiumCombo = /contenido premium/.test(latestAssistant) && /ia avanzado/.test(latestAssistant);
+    const offersIntermediateAdvancedCombo = /contenido intermedio/.test(latestAssistant) && /ia avanzado/.test(latestAssistant);
+    if (tierMatch[1] === 'avanzado' && offersPremiumCombo && !offersIntermediateAdvancedCombo) {
+      return 'Combo Contenido Premium + IA Avanzado';
+    }
+    if (tierMatch[1] === 'avanzado' && offersPremiumCombo && offersIntermediateAdvancedCombo) {
+      return null;
+    }
+  }
+
   if (tierMatch?.[1] === 'avanzado') return 'IA Comercial Avanzado';
   if (tierMatch && ['premium', 'intermedio'].includes(tierMatch[1]) && !asksAi) return `Contenido y Redes ${tierMatch[1][0].toUpperCase() + tierMatch[1].slice(1)}`;
   if (tierMatch && asksAi && !asksContent) return `IA Comercial ${tierMatch[1] === 'premium' ? 'Avanzado' : tierMatch[1][0].toUpperCase() + tierMatch[1].slice(1)}`;
@@ -400,7 +464,6 @@ function findSelectedOffer(messages) {
   if (/\bsitio\s+web\s+completo\b/.test(latestUserMessage)) return 'Sitio web completo';
   if (/\bgestion mensual de pauta\b/.test(latestUserMessage)) return 'Gestión mensual de pauta';
 
-  const latestAssistant = normalizeText(messages.slice(-5).filter(({ role }) => role === 'assistant').at(-1)?.content || '');
   if (isOfferConfirmation(messages)) {
     const proposalMessages = messages.slice(-9).filter(({ role }) => role === 'assistant').map(({ content }) => normalizeText(content)).reverse();
     const proposal = proposalMessages.find((text) => /(?:te parece adecuado|te parece bien|quieres avanzar|avanzar con este combo)/.test(text)
@@ -440,24 +503,50 @@ function findSelectedOffer(messages) {
 
 async function getModelStatus() {
   if (aiProvider === 'gateway') {
-    return {
+    const now = Date.now();
+    if (gatewayStatusCache && now < gatewayStatusCache.expiresAt) return { ...gatewayStatusCache.value };
+
+    const status = {
       provider: 'gateway',
       configured: Boolean(aiGatewayApiKey),
-      connected: Boolean(aiGatewayApiKey),
-      modelAvailable: Boolean(aiGatewayApiKey),
+      connected: false,
+      authenticated: null,
+      modelAvailable: false,
+      ready: false,
       model: aiGatewayModel,
     };
+    if (aiGatewayApiKey) {
+      try {
+        const response = await fetch('https://ai-gateway.vercel.sh/v1/models', {
+          headers: { Authorization: 'Bearer ' + aiGatewayApiKey },
+          signal: AbortSignal.timeout(5000),
+        });
+        status.connected = true;
+        status.authenticated = response.ok ? true : [401, 403].includes(response.status) ? false : null;
+        if (response.ok) {
+          const catalog = await response.json();
+          status.modelAvailable = Array.isArray(catalog.data)
+            && catalog.data.some((model) => model.id === aiGatewayModel && model.type === 'language');
+        }
+      } catch {
+        status.connected = false;
+        status.authenticated = null;
+      }
+    }
+    status.ready = status.configured && status.connected && status.authenticated === true && status.modelAvailable;
+    gatewayStatusCache = { expiresAt: now + gatewayStatusCacheMs, value: status };
+    return { ...status };
   }
 
   try {
     const response = await fetch(`${ollamaBaseUrl}/api/tags`, { signal: AbortSignal.timeout(1500) });
-    if (!response.ok) return { provider: 'ollama', configured: false, connected: false, modelAvailable: false, model: ollamaModel };
+    if (!response.ok) return { provider: 'ollama', configured: false, connected: false, modelAvailable: false, ready: false, model: ollamaModel };
     const data = await response.json();
     const modelAvailable = Array.isArray(data.models)
       && data.models.some((model) => model.name === ollamaModel || model.model === ollamaModel);
-    return { provider: 'ollama', configured: modelAvailable, connected: true, modelAvailable, model: ollamaModel };
+    return { provider: 'ollama', configured: modelAvailable, connected: true, modelAvailable, ready: modelAvailable, model: ollamaModel };
   } catch {
-    return { provider: 'ollama', configured: false, connected: false, modelAvailable: false, model: ollamaModel };
+    return { provider: 'ollama', configured: false, connected: false, modelAvailable: false, ready: false, model: ollamaModel };
   }
 }
 
@@ -499,7 +588,7 @@ const server = createServer(async (request, response) => {
   const url = new URL(request.url || '/', `http://${request.headers.host || 'localhost'}`);
   if (url.pathname === '/api/health') {
     const status = await getModelStatus();
-    return json(response, status.configured ? 200 : 503, status);
+    return json(response, status.ready ? 200 : 503, status);
   }
   if (url.pathname === '/api/chat') return handleChat(request, response);
   if (request.method !== 'GET' && request.method !== 'HEAD') return json(response, 405, { error: 'Método no permitido.' });

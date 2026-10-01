@@ -2,6 +2,10 @@
 
 Aplicación local con una interfaz de chat para vender los planes de Contenido y Redes y el Sistema IA Comercial de L’Orage Media. La conversación de negocios ayuda a descubrir la necesidad, recomendar un plan o combo y guiar al prospecto hacia el contacto con un asesor.
 
+## Créditos
+
+Proyecto de David Gutiérrez, desarrollado con apoyo de OpenAI Codex para la implementación y documentación.
+
 ## Ejecutar en tu computadora
 
 Requisitos: Node.js 22 o superior, pnpm y Ollama instalado y abierto.
@@ -40,11 +44,11 @@ En **Advanced → Environment Variables**, añade estas variables antes de crear
 | `AI_GATEWAY_API_KEY` | Tu clave privada de Vercel AI Gateway; introdúcela directamente en Render |
 | `AI_GATEWAY_MODEL` | `google/gemini-3.5-flash-lite` |
 
-No guardes la clave en GitHub ni en `.env.example`. El archivo `.env` local está excluido de Git. En Render, `AI_GATEWAY_API_KEY` debe tener una clave válida; sin ella, `/api/health` responde `503` y el chat no puede usar el modelo.
+No guardes la clave en GitHub ni en `.env.example`. El archivo `.env` local está excluido de Git. En Render, `AI_GATEWAY_API_KEY` debe tener una clave válida; `/api/health` verifica la autenticación y que el modelo configurado aparezca en el catálogo. Responde `503` si falta la clave, AI Gateway la rechaza, falla la conexión o no encuentra el modelo. No genera una respuesta de prueba, así que los bloqueos de proveedor o presupuesto se detectan al enviar un mensaje en el chat.
 
 Si el formulario no muestra **Health Check Path**, guarda `/api/health` después desde la configuración del servicio. Antes de pulsar **Create Web Service**, confirma el plan y su precio mensual.
 
-Cuando el despliegue termine, abre la URL `onrender.com` que Render asigna al servicio y comprueba que la página cargue. También puedes abrir `https://TU-SERVICIO.onrender.com/api/health`; debe responder con `"configured": true` y `"provider": "gateway"`.
+Cuando el despliegue termine, abre la URL `onrender.com` que Render asigna al servicio y comprueba que la página cargue. También puedes abrir `https://TU-SERVICIO.onrender.com/api/health`; debe responder con `"ready": true`, `"provider": "gateway"` y el modelo configurado.
 
 No hace falta configurar Ollama en Render. Para usar la app localmente, `AI_PROVIDER` conserva `ollama` como valor predeterminado. El plan de Render y el consumo del modelo en AI Gateway son cobros distintos; verifica ambos antes de activar el servicio y revisa el presupuesto de AI Gateway.
 
@@ -63,7 +67,7 @@ No hace falta configurar Ollama en Render. Para usar la app localmente, `AI_PROV
 ## Límites técnicos de esta versión
 
 - La conversación se ejecuta en el navegador local y no se guarda en una base de datos.
-- El servidor limita el historial, el tamaño de los mensajes y la frecuencia de solicitudes.
+- El servidor limita el historial y el tamaño de los mensajes; también limita solicitudes por IP con una tabla de tamaño acotado.
 - La app ofrece formato Markdown seguro para respuestas del asistente (negritas, cursivas, listas, títulos, código y enlaces).
 - Cuando detecta una intención clara de contratación, muestra un enlace de WhatsApp con un mensaje preparado para Camilo Esquiaqui. El cliente revisa y envía el mensaje; la app no lo envía ni integra WhatsApp Business, Instagram o un CRM.
-- GitHub Pages sirve archivos estáticos y no ejecuta este backend. Esta configuración de Ollama está pensada para uso local; una versión pública necesitaría un modelo alojado en un servidor accesible desde Internet.
+- GitHub Pages puede servir la interfaz estática, pero no ejecuta este backend Node.js. Para publicar el chat completo, sigue la configuración de Render descrita arriba; allí se usa AI Gateway y no el Ollama de tu computador.

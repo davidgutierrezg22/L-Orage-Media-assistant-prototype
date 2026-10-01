@@ -153,9 +153,14 @@ async function checkService() {
     const response = await fetch('/api/health');
     const result = await response.json();
     modelStatus.textContent = result.provider === 'gateway'
-      ? result.configured ? 'AI Gateway configurado' : 'Falta configurar AI Gateway'
+      ? !result.configured ? 'Falta configurar AI Gateway'
+        : !result.connected ? 'No se pudo conectar con AI Gateway'
+          : result.authenticated === false ? 'AI Gateway rechazó la clave'
+            : result.authenticated !== true ? 'No se pudo validar la clave de AI Gateway'
+          : !result.modelAvailable ? 'Modelo ' + result.model + ' no disponible'
+            : 'AI Gateway conectado'
       : result.configured ? 'Ollama local conectado' : result.connected ? 'Falta el modelo local' : 'Abre Ollama para conectar';
-    modelStatus.parentElement.querySelector('i').classList.toggle('offline', !result.configured);
+    modelStatus.parentElement.querySelector('i').classList.toggle('offline', !result.ready);
   } catch {
     modelStatus.textContent = 'Abre la app con pnpm dev';
     modelStatus.parentElement.querySelector('i').classList.add('offline');
